@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { logOut } from "../firebase/auth";
 
-export default function UserMenu({ user, onAuthClick, onProfileClick, onBookmarksClick, onCommunityClick, onAnalyticsClick }) {
+export default function UserMenu({ user, onAuthClick, onProfileClick, onBookmarksClick, onCommunityClick, onAnalyticsClick, onDMClick }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
 
@@ -15,8 +15,8 @@ export default function UserMenu({ user, onAuthClick, onProfileClick, onBookmark
   if (!user) {
     return (
       <button style={s.loginBtn} onClick={onAuthClick}
-        onMouseEnter={(e) => { e.currentTarget.style.background = "#1e40af"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = "var(--blue)"; }}>
+        onMouseEnter={(e) => (e.currentTarget.style.background = "#1e40af")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--blue)")}>
         Log In
       </button>
     );
@@ -28,6 +28,7 @@ export default function UserMenu({ user, onAuthClick, onProfileClick, onBookmark
   const menuItems = [
     { icon: "👤", label: "My Profile",  action: () => { setOpen(false); onProfileClick?.();   } },
     { icon: "📊", label: "Analytics",   action: () => { setOpen(false); onAnalyticsClick?.(); } },
+    { icon: "💌", label: "Messages",    action: () => { setOpen(false); onDMClick?.();         } }, // ✅
     { icon: "🔖", label: "Bookmarks",   action: () => { setOpen(false); onBookmarksClick?.(); } },
     { icon: "👥", label: "Community",   action: () => { setOpen(false); onCommunityClick?.(); } },
   ];
@@ -54,16 +55,16 @@ export default function UserMenu({ user, onAuthClick, onProfileClick, onBookmark
           <div style={s.ddDivider} />
           {menuItems.map(({ icon, label, action }) => (
             <button key={label} style={s.ddItem}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-2)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-2)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               onClick={action}>
               <span>{icon}</span> {label}
             </button>
           ))}
           <div style={s.ddDivider} />
           <button style={{ ...s.ddItem, color: "#ef4444" }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#fee2e2"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#fee2e2")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             onClick={async () => { await logOut(); setOpen(false); }}>
             <span>🚪</span> Log Out
           </button>

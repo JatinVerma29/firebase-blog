@@ -15,6 +15,7 @@ import AuthModal from "./components/AuthModal";
 import CommunityPage from "./components/CommunityPage";
 import UserProfilePage from "./components/UserProfilePage";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import DirectMessages from "./components/DirectMessages"; // ✅ new
 
 import { usePosts } from "./hooks/usePosts";
 import { useDarkMode } from "./hooks/useDarkMode";
@@ -41,10 +42,11 @@ export default function App() {
   const [selectedPost, setSelectedPost]   = useState(null);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showAuth, setShowAuth]           = useState(false);
-  const [showAuthPage, setShowAuthPage]   = useState(false); // ✅ full page auth
+  const [showAuthPage, setShowAuthPage]   = useState(false);
   const [showCommunity, setShowCommunity] = useState(false);
   const [showProfile, setShowProfile]     = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showDMs, setShowDMs]             = useState(false); // ✅ new
   const [bookmarkCount, setBookmarkCount] = useState(getBookmarks().length);
   const [isMobile, setIsMobile]           = useState(window.innerWidth < 768);
 
@@ -53,23 +55,20 @@ export default function App() {
   const { user, loading: authLoading } = useAuth();
 
   useEffect(() => { setTimeout(() => setLoadingDone(true), 1200); }, []);
-
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
-
   useEffect(() => {
     if (!showBookmarks && !selectedPost) setBookmarkCount(getBookmarks().length);
   }, [showBookmarks, selectedPost]);
 
   const handlePublished   = () => toast.success("Post published successfully!");
   const handleDemoPublish = (d) => { addDemoPost(d); handlePublished(); };
-
-  // ✅ On mobile: open full-page auth; on desktop: open modal
-  const handleAuthClick  = () => isMobile ? setShowAuthPage(true) : setShowAuth(true);
-  const handleWriteClick = () => { if (!user) { handleAuthClick(); return; } setShowWrite(true); };
+  const handleAuthClick   = () => isMobile ? setShowAuthPage(true) : setShowAuth(true);
+  const handleWriteClick  = () => { if (!user) { handleAuthClick(); return; } setShowWrite(true); };
+  const handleDMClick     = () => { if (!user) { handleAuthClick(); return; } setShowDMs(true); }; // ✅
 
   return (
     <>
@@ -88,6 +87,7 @@ export default function App() {
         onAuthClick={handleAuthClick}
         onProfileClick={() => setShowProfile(true)}
         onAnalyticsClick={() => setShowAnalytics(true)}
+        onDMClick={handleDMClick} // ✅
         user={user}
       />
 
@@ -98,39 +98,30 @@ export default function App() {
         <PostsSection posts={posts} loading={loading} isDemo={isDemo} onOpenPost={setSelectedPost} />
         <About />
       </main>
-
       <Footer onWriteClick={handleWriteClick} />
 
       {showWrite && <WriteModal onClose={() => setShowWrite(false)} onPublished={handlePublished}
         isDemo={isDemo} onDemoPublish={handleDemoPublish} currentUser={user} />}
-
       {selectedPost && <PostReader post={selectedPost}
         onClose={() => { setSelectedPost(null); setBookmarkCount(getBookmarks().length); }}
         isDemo={isDemo} currentUser={user} allPosts={posts} />}
-
       {showBookmarks && <BookmarksPanel allPosts={posts}
         onOpenPost={(p) => { setShowBookmarks(false); setSelectedPost(p); }}
         onClose={() => setShowBookmarks(false)} />}
-
-      {/* Modal auth (desktop) */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)}
         onSuccess={() => toast.success("Welcome to AERO BLOG!")} />}
-
-      {/* ✅ Full page auth (mobile) */}
-      {showAuthPage && <AuthModal
-        fullPage
-        onClose={() => setShowAuthPage(false)}
+      {showAuthPage && <AuthModal fullPage onClose={() => setShowAuthPage(false)}
         onSuccess={() => { toast.success("Welcome to AERO BLOG!"); setShowAuthPage(false); }} />}
-
       {showCommunity && <CommunityPage onClose={() => setShowCommunity(false)}
         currentUser={user} isDemo={isDemo} />}
-
       {showProfile && <UserProfilePage currentUser={user} onClose={() => setShowProfile(false)}
         onOpenPost={(p) => { setShowProfile(false); setSelectedPost(p); }}
         allPosts={posts} isDemo={isDemo} />}
-
       {showAnalytics && <AnalyticsDashboard currentUser={user} allPosts={posts}
         onClose={() => setShowAnalytics(false)} />}
+
+      {/* ✅ Direct Messages */}
+      {showDMs && <DirectMessages currentUser={user} onClose={() => setShowDMs(false)} />}
     </>
   );
 }

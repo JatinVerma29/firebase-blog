@@ -8,6 +8,7 @@ export default function Navbar({
   bookmarkCount, onBookmarksClick,
   onCommunityClick, onAuthClick,
   onProfileClick, onAnalyticsClick,
+  onDMClick, // ✅ added
   user,
 }) {
   const [scrolled, setScrolled]   = useState(false);
@@ -19,10 +20,16 @@ export default function Navbar({
     const onResize = () => { setIsMobile(window.innerWidth < 768); setMenuOpen(false); };
     window.addEventListener("scroll", onScroll);
     window.addEventListener("resize", onResize);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onResize); };
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+    };
   }, []);
 
-  const scrollTo = (id) => { document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); setMenuOpen(false); };
+  const scrollTo = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    setMenuOpen(false);
+  };
 
   const navBg = scrolled
     ? dark ? "rgba(15,23,42,0.95)" : "rgba(248,250,255,0.95)"
@@ -50,24 +57,41 @@ export default function Navbar({
           <div style={s.links}>
             {[["features","Features"],["posts","Posts"],["about","About"]].map(([id, label]) => (
               <button key={id} style={s.link} onClick={() => scrollTo(id)}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--blue)"; e.currentTarget.style.background = "var(--bg-2)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--mid)"; e.currentTarget.style.background = "transparent"; }}>
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = "var(--blue)";
+                  e.currentTarget.style.background = "var(--bg-2)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = "var(--mid)";
+                  e.currentTarget.style.background = "transparent";
+                }}>
                 {label}
               </button>
             ))}
+
             <button style={s.link} onClick={onCommunityClick}
-              onMouseEnter={(e) => { e.currentTarget.style.color = "var(--blue)"; e.currentTarget.style.background = "var(--bg-2)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = "var(--mid)"; e.currentTarget.style.background = "transparent"; }}>
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--blue)";
+                e.currentTarget.style.background = "var(--bg-2)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--mid)";
+                e.currentTarget.style.background = "transparent";
+              }}>
               👥 Community
             </button>
+
             <button style={s.iconBtn} onClick={onBookmarksClick} title="Bookmarks">
               🔖
               {bookmarkCount > 0 && <span style={s.badge}>{bookmarkCount}</span>}
             </button>
+
             <button style={s.iconBtn} onClick={onToggleDark} title={dark ? "Light mode" : "Dark mode"}>
               {dark ? "☀️" : "🌙"}
             </button>
+
             <NotificationBell user={user} />
+
             {user && (
               <button style={s.writeBtn} onClick={onWriteClick}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#1e40af")}
@@ -75,56 +99,87 @@ export default function Navbar({
                 ✏️ Write
               </button>
             )}
-            <UserMenu user={user} onAuthClick={onAuthClick} onProfileClick={onProfileClick}
-              onBookmarksClick={onBookmarksClick} onCommunityClick={onCommunityClick}
-              onAnalyticsClick={onAnalyticsClick} />
+
+            <UserMenu
+              user={user}
+              onAuthClick={onAuthClick}
+              onProfileClick={onProfileClick}
+              onBookmarksClick={onBookmarksClick}
+              onCommunityClick={onCommunityClick}
+              onAnalyticsClick={onAnalyticsClick}
+              onDMClick={onDMClick} // ✅ added
+            />
           </div>
         )}
 
-       {/* Mobile right side */}
-{isMobile && (
-  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-    <button style={s.iconBtn} onClick={onToggleDark}>{dark ? "☀️" : "🌙"}</button>
-    <NotificationBell user={user} />
-    {/* ✅ Show avatar on mobile too */}
-    <UserMenu
-      user={user}
-      onAuthClick={onAuthClick}
-      onProfileClick={onProfileClick}
-      onBookmarksClick={onBookmarksClick}
-      onCommunityClick={onCommunityClick}
-      onAnalyticsClick={onAnalyticsClick}
-    />
-    {/* Hamburger */}
-    <button style={s.hamburger} onClick={() => setMenuOpen((o) => !o)}>
-      <span style={{ ...s.bar, transform: menuOpen ? "rotate(45deg) translate(5px,5px)" : "none" }} />
-      <span style={{ ...s.bar, opacity: menuOpen ? 0 : 1 }} />
-      <span style={{ ...s.bar, transform: menuOpen ? "rotate(-45deg) translate(5px,-5px)" : "none" }} />
-    </button>
-  </div>
-)}
+        {/* Mobile right side */}
+        {isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button style={s.iconBtn} onClick={onToggleDark}>
+              {dark ? "☀️" : "🌙"}
+            </button>
+
+            <NotificationBell user={user} />
+
+            <UserMenu
+              user={user}
+              onAuthClick={onAuthClick}
+              onProfileClick={onProfileClick}
+              onBookmarksClick={onBookmarksClick}
+              onCommunityClick={onCommunityClick}
+              onAnalyticsClick={onAnalyticsClick}
+              onDMClick={onDMClick} // ✅ added
+            />
+
+            {/* Hamburger */}
+            <button style={s.hamburger} onClick={() => setMenuOpen((o) => !o)}>
+              <span style={{ ...s.bar, transform: menuOpen ? "rotate(45deg) translate(5px,5px)" : "none" }} />
+              <span style={{ ...s.bar, opacity: menuOpen ? 0 : 1 }} />
+              <span style={{ ...s.bar, transform: menuOpen ? "rotate(-45deg) translate(5px,-5px)" : "none" }} />
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* Mobile Drawer */}
       {isMobile && menuOpen && (
         <div style={s.drawer}>
           <div style={s.drawerInner}>
-            {/* Nav links */}
             {[["features","🚀 Features"],["posts","📝 Posts"],["about","ℹ️ About"]].map(([id, label]) => (
-              <button key={id} style={s.drawerLink} onClick={() => scrollTo(id)}>{label}</button>
+              <button key={id} style={s.drawerLink} onClick={() => scrollTo(id)}>
+                {label}
+              </button>
             ))}
-            <button style={s.drawerLink} onClick={() => { onCommunityClick(); setMenuOpen(false); }}>👥 Community</button>
+
+            <button style={s.drawerLink} onClick={() => { onCommunityClick(); setMenuOpen(false); }}>
+              👥 Community
+            </button>
+
             <button style={s.drawerLink} onClick={() => { onBookmarksClick(); setMenuOpen(false); }}>
               🔖 Bookmarks {bookmarkCount > 0 && <span style={s.drawerBadge}>{bookmarkCount}</span>}
+            </button>
+
+            {/* ✅ Messages button added */}
+            <button
+              style={s.drawerLink}
+              onClick={() => { onDMClick?.(); setMenuOpen(false); }}
+            >
+              💌 Messages
             </button>
 
             <div style={s.drawerDivider} />
 
             {user ? (
               <>
-                <button style={s.drawerLink} onClick={() => { onWriteClick(); setMenuOpen(false); }}>✏️ Write a Post</button>
-                <button style={s.drawerLink} onClick={() => { onProfileClick(); setMenuOpen(false); }}>👤 My Profile</button>
-                <button style={s.drawerLink} onClick={() => { onAnalyticsClick(); setMenuOpen(false); }}>📊 Analytics</button>
+                <button style={s.drawerLink} onClick={() => { onWriteClick(); setMenuOpen(false); }}>
+                  ✏️ Write a Post
+                </button>
+                <button style={s.drawerLink} onClick={() => { onProfileClick(); setMenuOpen(false); }}>
+                  👤 My Profile
+                </button>
+                <button style={s.drawerLink} onClick={() => { onAnalyticsClick(); setMenuOpen(false); }}>
+                  📊 Analytics
+                </button>
               </>
             ) : (
               <button style={s.drawerSignIn} onClick={() => { onAuthClick(); setMenuOpen(false); }}>
@@ -135,7 +190,7 @@ export default function Navbar({
         </div>
       )}
 
-      {/* Overlay to close drawer */}
+      {/* Overlay */}
       {isMobile && menuOpen && (
         <div style={s.overlay} onClick={() => setMenuOpen(false)} />
       )}
@@ -188,7 +243,6 @@ const s = {
     border: "none", borderRadius: 8, fontFamily: "var(--font-display)",
     fontWeight: 700, fontSize: "0.86rem", cursor: "pointer", transition: "background 0.2s",
   },
-  // ── Hamburger ──
   hamburger: {
     width: 40, height: 40, background: "var(--bg-2)", border: "1px solid var(--border)",
     borderRadius: 10, cursor: "pointer", display: "flex",
@@ -198,7 +252,6 @@ const s = {
     width: 20, height: 2, background: "var(--ink)", borderRadius: 2,
     transition: "all 0.3s", display: "block",
   },
-  // ── Drawer ──
   overlay: {
     position: "fixed", inset: 0, zIndex: 98,
     background: "rgba(12,12,20,0.5)", backdropFilter: "blur(4px)",
