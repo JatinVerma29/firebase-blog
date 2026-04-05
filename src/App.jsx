@@ -30,7 +30,7 @@ function LoadingScreen({ done }) {
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       transition: "opacity 0.6s", opacity: done ? 0 : 1, pointerEvents: done ? "none" : "auto",
     }}>
-      <h1 style={{ color: "#fff" }}>AERO BLOG</h1>
+      <h1 style={{ color: "#fff", fontFamily: "var(--font-display)" }}>AERO BLOG</h1>
     </div>
   );
 }
@@ -41,10 +41,12 @@ export default function App() {
   const [selectedPost, setSelectedPost]   = useState(null);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showAuth, setShowAuth]           = useState(false);
+  const [showAuthPage, setShowAuthPage]   = useState(false); // ✅ full page auth
   const [showCommunity, setShowCommunity] = useState(false);
   const [showProfile, setShowProfile]     = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [bookmarkCount, setBookmarkCount] = useState(getBookmarks().length);
+  const [isMobile, setIsMobile]           = useState(window.innerWidth < 768);
 
   const { posts, loading, isDemo, addDemoPost } = usePosts();
   const [dark, setDark] = useDarkMode();
@@ -53,12 +55,21 @@ export default function App() {
   useEffect(() => { setTimeout(() => setLoadingDone(true), 1200); }, []);
 
   useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+
+  useEffect(() => {
     if (!showBookmarks && !selectedPost) setBookmarkCount(getBookmarks().length);
   }, [showBookmarks, selectedPost]);
 
   const handlePublished   = () => toast.success("Post published successfully!");
   const handleDemoPublish = (d) => { addDemoPost(d); handlePublished(); };
-  const handleWriteClick  = () => { if (!user) { setShowAuth(true); return; } setShowWrite(true); };
+
+  // ✅ On mobile: open full-page auth; on desktop: open modal
+  const handleAuthClick  = () => isMobile ? setShowAuthPage(true) : setShowAuth(true);
+  const handleWriteClick = () => { if (!user) { handleAuthClick(); return; } setShowWrite(true); };
 
   return (
     <>
@@ -74,7 +85,7 @@ export default function App() {
         bookmarkCount={bookmarkCount}
         onBookmarksClick={() => setShowBookmarks(true)}
         onCommunityClick={() => setShowCommunity(true)}
-        onAuthClick={() => setShowAuth(true)}
+        onAuthClick={handleAuthClick}
         onProfileClick={() => setShowProfile(true)}
         onAnalyticsClick={() => setShowAnalytics(true)}
         user={user}
@@ -101,8 +112,15 @@ export default function App() {
         onOpenPost={(p) => { setShowBookmarks(false); setSelectedPost(p); }}
         onClose={() => setShowBookmarks(false)} />}
 
+      {/* Modal auth (desktop) */}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)}
         onSuccess={() => toast.success("Welcome to AERO BLOG!")} />}
+
+      {/* ✅ Full page auth (mobile) */}
+      {showAuthPage && <AuthModal
+        fullPage
+        onClose={() => setShowAuthPage(false)}
+        onSuccess={() => { toast.success("Welcome to AERO BLOG!"); setShowAuthPage(false); }} />}
 
       {showCommunity && <CommunityPage onClose={() => setShowCommunity(false)}
         currentUser={user} isDemo={isDemo} />}
