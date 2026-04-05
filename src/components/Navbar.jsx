@@ -81,19 +81,28 @@ export default function Navbar({
           </div>
         )}
 
-        {/* Mobile right side */}
-        {isMobile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button style={s.iconBtn} onClick={onToggleDark}>{dark ? "☀️" : "🌙"}</button>
-            <NotificationBell user={user} />
-            {/* Hamburger */}
-            <button style={s.hamburger} onClick={() => setMenuOpen((o) => !o)}>
-              <span style={{ ...s.bar, transform: menuOpen ? "rotate(45deg) translate(5px,5px)" : "none" }} />
-              <span style={{ ...s.bar, opacity: menuOpen ? 0 : 1 }} />
-              <span style={{ ...s.bar, transform: menuOpen ? "rotate(-45deg) translate(5px,-5px)" : "none" }} />
-            </button>
-          </div>
-        )}
+       {/* Mobile right side */}
+{isMobile && (
+  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <button style={s.iconBtn} onClick={onToggleDark}>{dark ? "☀️" : "🌙"}</button>
+    <NotificationBell user={user} />
+    {/* ✅ Show avatar on mobile too */}
+    <UserMenu
+      user={user}
+      onAuthClick={onAuthClick}
+      onProfileClick={onProfileClick}
+      onBookmarksClick={onBookmarksClick}
+      onCommunityClick={onCommunityClick}
+      onAnalyticsClick={onAnalyticsClick}
+    />
+    {/* Hamburger */}
+    <button style={s.hamburger} onClick={() => setMenuOpen((o) => !o)}>
+      <span style={{ ...s.bar, transform: menuOpen ? "rotate(45deg) translate(5px,5px)" : "none" }} />
+      <span style={{ ...s.bar, opacity: menuOpen ? 0 : 1 }} />
+      <span style={{ ...s.bar, transform: menuOpen ? "rotate(-45deg) translate(5px,-5px)" : "none" }} />
+    </button>
+  </div>
+)}
       </nav>
 
       {/* Mobile Drawer */}
