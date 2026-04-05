@@ -1,6 +1,9 @@
 // src/components/Comments.jsx
 import { useState, useEffect, useRef } from "react";
 import { subscribeToComments, addComment, deleteComment } from "../firebase/posts";
+import { createNotification } from "./NotificationBell";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
 import AISentimentBadge from "./ai/AISentimentBadge";
 
 function timeAgo(ts) {
@@ -26,7 +29,7 @@ function RenderText({ text }) {
   );
 }
 
-export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
+export default function Comments({ postId, postAuthor, postAuthorUid, postTitle, isDemo, currentUser }) {
   const [comments, setComments]           = useState([]);
   const [localComments, setLocalComments] = useState([]);
   const [text, setText]                   = useState("");
@@ -53,17 +56,21 @@ export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
   const handleMentionAuthor = () => handleMention(postAuthor);
 
   const handleSubmit = async () => {
-    if (!text.trim()) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;                    // ✅ guard empty
+    if (!currentUser) return;               // ✅ guard not logged in
     setSubmitting(true);
+
     const displayName = currentUser?.displayName || "Anonymous";
     const comment = {
       name:     displayName,
       uid:      currentUser?.uid || null,
       photoURL: currentUser?.photoURL || null,
-      text:     text.trim(),
+      text:     trimmed,
       replyTo:  replyTo?.name || null,
       postId,
     };
+
     try {
       if (isDemo) {
         setLocalComments((p) => [
@@ -72,9 +79,56 @@ export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
         ]);
       } else {
         await addComment(postId, comment);
+
+        // ── Send notification if commenter != post author ──
+        const isNotSelf = currentUser.uid !== postAuthorUid;
+
+        if (isNotSelf) {
+          // 1. Always notify post author about the comment
+          if (postAuthorUid) {
+            await createNotification(postAuthorUid, {
+              type:       "comment",
+              fromName:   displayName,
+              fromAvatar: currentUser?.photoURL || "",
+              postId,
+              postTitle:  postTitle || "a post",
+            });
+          }
+
+          // 2. If @mention detected, also look up mentioned user and notify them
+          const mentionMatch = trimmed.match(/@([\w\s]+)/g);
+          if (mentionMatch) {
+            for (const mention of mentionMatch) {
+              const mentionedName = mention.slice(1).trim();
+              // Skip if it's the same as post author (already notified above)
+              if (mentionedName.toLowerCase() === postAuthor?.toLowerCase()) continue;
+              // Try to find user by displayName in Firestore
+              try {
+                const { collection, query, where, getDocs } = await import("firebase/firestore");
+                const q = query(collection(db, "users"), where("displayName", "==", mentionedName));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                  const mentionedUid = snap.docs[0].id;
+                  if (mentionedUid !== currentUser.uid) {
+                    await createNotification(mentionedUid, {
+                      type:       "comment",
+                      fromName:   displayName,
+                      fromAvatar: currentUser?.photoURL || "",
+                      postId,
+                      postTitle:  postTitle || "a post",
+                    });
+                  }
+                }
+              } catch (e) { console.warn("Could not find mentioned user:", e); }
+            }
+          }
+        }
       }
+
       setText(""); setReplyTo(null);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("Comment post error:", e);
+    }
     setSubmitting(false);
   };
 
@@ -119,13 +173,18 @@ export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
             : currentUser ? (currentUser.displayName || "U")[0].toUpperCase() : "👤"}
         </div>
         <div style={s.inputRight}>
-          <textarea ref={inputRef} style={s.textarea} rows={3} maxLength={500}
+          <textarea
+            ref={inputRef}
+            style={s.textarea}
+            rows={3}
+            maxLength={500}
             placeholder={
               currentUser
                 ? `Write a comment… use @${postAuthor} to tag the author`
                 : "Log in to leave a comment"
             }
-            value={text} disabled={!currentUser}
+            value={text}
+            disabled={!currentUser || submitting}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) handleSubmit(); }}
           />
@@ -134,7 +193,11 @@ export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={s.charCount}>{text.length}/500</span>
               <button
-                style={{ ...s.submitBtn, opacity: (!currentUser || submitting || !text.trim()) ? 0.5 : 1 }}
+                style={{
+                  ...s.submitBtn,
+                  opacity: (!currentUser || submitting || !text.trim()) ? 0.5 : 1,
+                  cursor: (!currentUser || submitting || !text.trim()) ? "not-allowed" : "pointer",
+                }}
                 disabled={!currentUser || submitting || !text.trim()}
                 onClick={handleSubmit}>
                 {submitting ? "Posting…" : "Post →"}
@@ -176,7 +239,6 @@ export default function Comments({ postId, postAuthor, isDemo, currentUser }) {
 
 function CommentItem({ comment: c, canDelete, onDelete, onMention }) {
   const [hovered, setHovered] = useState(false);
-
   return (
     <div style={s.comment}
       onMouseEnter={() => setHovered(true)}
@@ -199,8 +261,6 @@ function CommentItem({ comment: c, canDelete, onDelete, onMention }) {
           </div>
         </div>
         <p style={s.commentText}><RenderText text={c.text} /></p>
-
-        {/* 🤖 AI Sentiment Badge on every comment */}
         <AISentimentBadge text={c.text} autoAnalyze={false} />
       </div>
     </div>
@@ -209,111 +269,31 @@ function CommentItem({ comment: c, canDelete, onDelete, onMention }) {
 
 const s = {
   wrap: { marginTop: 40, paddingTop: 32, borderTop: "1px solid var(--border)" },
-  header: {
-    display: "flex", alignItems: "center",
-    justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10,
-  },
-  heading: {
-    fontFamily: "var(--font-display)", fontSize: "1.1rem",
-    fontWeight: 800, color: "var(--ink)",
-    display: "flex", alignItems: "center", gap: 10,
-  },
-  badge: {
-    background: "var(--blue)", color: "#fff",
-    fontSize: "0.72rem", padding: "2px 9px",
-    borderRadius: 100, fontWeight: 700,
-  },
-  mentionAuthorBtn: {
-    padding: "7px 14px", borderRadius: 100,
-    background: "var(--bg-2)", border: "1px solid rgba(29,78,216,0.2)",
-    color: "var(--blue)", fontFamily: "var(--font-display)",
-    fontWeight: 700, fontSize: "0.78rem", cursor: "pointer",
-  },
-  replyBanner: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    background: "var(--bg-2)", border: "1px solid rgba(29,78,216,0.2)",
-    borderRadius: 8, padding: "8px 14px", marginBottom: 12,
-    fontSize: "0.84rem", color: "var(--blue)",
-    fontFamily: "var(--font-display)", fontWeight: 600,
-  },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 },
+  heading: { fontFamily: "var(--font-display)", fontSize: "1.1rem", fontWeight: 800, color: "var(--ink)", display: "flex", alignItems: "center", gap: 10 },
+  badge: { background: "var(--blue)", color: "#fff", fontSize: "0.72rem", padding: "2px 9px", borderRadius: 100, fontWeight: 700 },
+  mentionAuthorBtn: { padding: "7px 14px", borderRadius: 100, background: "var(--bg-2)", border: "1px solid rgba(29,78,216,0.2)", color: "var(--blue)", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer" },
+  replyBanner: { display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg-2)", border: "1px solid rgba(29,78,216,0.2)", borderRadius: 8, padding: "8px 14px", marginBottom: 12, fontSize: "0.84rem", color: "var(--blue)", fontFamily: "var(--font-display)", fontWeight: 600 },
   cancelReply: { background: "none", border: "none", cursor: "pointer", color: "var(--mid)", fontSize: "0.9rem" },
   inputWrap: { display: "flex", gap: 12, marginBottom: 24, alignItems: "flex-start" },
-  userAvatar: {
-    width: 38, height: 38, borderRadius: "50%",
-    background: "var(--blue)", color: "#fff",
-    fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.9rem",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    flexShrink: 0, overflow: "hidden",
-  },
+  userAvatar: { width: 38, height: 38, borderRadius: "50%", background: "var(--blue)", color: "#fff", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" },
   inputRight: { flex: 1, display: "flex", flexDirection: "column", gap: 6 },
-  textarea: {
-    width: "100%", padding: "10px 14px",
-    border: "1.5px solid var(--border)", borderRadius: 10,
-    fontFamily: "var(--font-body)", fontSize: "0.92rem",
-    color: "var(--ink)", background: "var(--bg)",
-    outline: "none", resize: "vertical", lineHeight: 1.6,
-  },
-  inputFooter: {
-    display: "flex", alignItems: "center",
-    justifyContent: "space-between", flexWrap: "wrap", gap: 8,
-  },
+  textarea: { width: "100%", padding: "10px 14px", border: "1.5px solid var(--border)", borderRadius: 10, fontFamily: "var(--font-body)", fontSize: "0.92rem", color: "var(--ink)", background: "var(--bg)", outline: "none", resize: "vertical", lineHeight: 1.6 },
+  inputFooter: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 },
   hint: { fontSize: "0.72rem", color: "var(--muted)", fontFamily: "var(--font-display)" },
   charCount: { fontSize: "0.74rem", color: "var(--muted)" },
-  submitBtn: {
-    padding: "8px 18px", background: "var(--blue)", color: "#fff",
-    border: "none", borderRadius: 8,
-    fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.84rem",
-    cursor: "pointer", transition: "opacity 0.2s",
-  },
-  empty: {
-    display: "flex", flexDirection: "column", alignItems: "center",
-    gap: 8, padding: "32px 0", color: "var(--mid)",
-    fontSize: "0.9rem", fontFamily: "var(--font-display)",
-  },
+  submitBtn: { padding: "8px 18px", background: "var(--blue)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.84rem", transition: "opacity 0.2s" },
+  empty: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "32px 0", color: "var(--mid)", fontSize: "0.9rem", fontFamily: "var(--font-display)" },
   list: { display: "flex", flexDirection: "column", gap: 0 },
-  comment: {
-    display: "flex", gap: 12, padding: "14px 0",
-    borderBottom: "1px solid var(--border)", position: "relative",
-  },
-  commentAvatar: {
-    width: 36, height: 36, borderRadius: "50%",
-    background: "var(--blue)", color: "#fff",
-    fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.85rem",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    flexShrink: 0, overflow: "hidden",
-  },
+  comment: { display: "flex", gap: 12, padding: "14px 0", borderBottom: "1px solid var(--border)", position: "relative" },
+  commentAvatar: { width: 36, height: 36, borderRadius: "50%", background: "var(--blue)", color: "#fff", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" },
   commentBody: { flex: 1, minWidth: 0 },
-  commentHeader: {
-    display: "flex", alignItems: "center",
-    gap: 8, marginBottom: 5, flexWrap: "wrap",
-  },
-  commentName: {
-    fontFamily: "var(--font-display)", fontWeight: 700,
-    fontSize: "0.86rem", color: "var(--ink)",
-  },
-  replyingTo: {
-    fontSize: "0.76rem", color: "var(--blue)",
-    fontFamily: "var(--font-display)", fontWeight: 600,
-    background: "var(--bg-2)", padding: "1px 8px", borderRadius: 100,
-  },
+  commentHeader: { display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" },
+  commentName: { fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.86rem", color: "var(--ink)" },
+  replyingTo: { fontSize: "0.76rem", color: "var(--blue)", fontFamily: "var(--font-display)", fontWeight: 600, background: "var(--bg-2)", padding: "1px 8px", borderRadius: 100 },
   commentTime: { fontSize: "0.74rem", color: "var(--muted)" },
-  commentActions: {
-    display: "flex", gap: 6, marginLeft: "auto", transition: "opacity 0.2s",
-  },
-  actionPill: {
-    padding: "3px 10px", borderRadius: 100,
-    background: "var(--bg)", border: "1px solid var(--border)",
-    fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.74rem",
-    color: "var(--blue)", cursor: "pointer",
-  },
-  commentText: {
-    fontSize: "0.93rem", lineHeight: 1.68,
-    color: "var(--ink-2, #374151)", fontFamily: "var(--font-body)",
-  },
-  showMoreBtn: {
-    width: "100%", padding: "10px", marginTop: 8,
-    background: "var(--bg)", border: "1px solid var(--border)",
-    borderRadius: 8, fontFamily: "var(--font-display)",
-    fontWeight: 700, fontSize: "0.82rem", color: "var(--mid)", cursor: "pointer",
-  },
+  commentActions: { display: "flex", gap: 6, marginLeft: "auto", transition: "opacity 0.2s" },
+  actionPill: { padding: "3px 10px", borderRadius: 100, background: "var(--bg)", border: "1px solid var(--border)", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.74rem", color: "var(--blue)", cursor: "pointer" },
+  commentText: { fontSize: "0.93rem", lineHeight: 1.68, color: "var(--ink-2, #374151)", fontFamily: "var(--font-body)" },
+  showMoreBtn: { width: "100%", padding: "10px", marginTop: 8, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "0.82rem", color: "var(--mid)", cursor: "pointer" },
 };

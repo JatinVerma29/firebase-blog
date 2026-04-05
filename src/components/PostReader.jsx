@@ -418,7 +418,14 @@ export default function PostReader({ post, onClose, isDemo, currentUser, allPost
             </div>
           )}
 
-          <Comments postId={post.id} postAuthor={post.author} isDemo={isDemo} currentUser={currentUser} />
+         <Comments
+            postId={post.id}
+            postAuthor={post.author}
+            postAuthorUid={post.uid}
+            postTitle={post.title}
+            isDemo={isDemo}
+            currentUser={currentUser}
+         />
 
           <AIRecommendations
             currentPostId={post.id}
