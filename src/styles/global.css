@@ -1,0 +1,171 @@
+/* src/styles/global.css */
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Core colors */
+  --ink: #0c0c14;
+  --ink-2: #1e1e2e;
+  --blue: #1d4ed8;
+  --blue-light: #3b82f6;
+  --blue-glow: rgba(29, 78, 216, 0.15);
+  --yellow: #f5c518;
+  --red: #ef4444;
+  --green: #10b981;
+  --mid: #64748b;
+  --muted: #94a3b8;
+  --border: #e2e8f0;
+  --border-dark: #cbd5e1;
+  --bg: #f8faff;
+  --bg-2: #f1f5fe;
+  --card: #ffffff;
+
+  /* Modal-safe variables — always light, never affected by dark mode */
+  --modal-bg:     #ffffff;
+  --modal-ink:    #0c0c14;
+  --input-bg:     #f8faff;
+  --input-ink:    #0c0c14;
+  --input-border: #e2e8f0;
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow: 0 4px 24px rgba(29, 78, 216, 0.08);
+  --shadow-lg: 0 16px 48px rgba(29, 78, 216, 0.14);
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'Lora', serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+/* ── MODAL SAFE ZONE ── */
+/* All modals, dialogs, and overlaid panels always use light colors */
+/* so inputs are always readable regardless of dark/light mode      */
+.modal-safe,
+.modal-safe input,
+.modal-safe textarea,
+.modal-safe select {
+  background-color: var(--modal-bg) !important;
+  color: var(--modal-ink) !important;
+}
+
+.modal-safe input,
+.modal-safe textarea,
+.modal-safe select {
+  background-color: var(--input-bg) !important;
+  color: var(--input-ink) !important;
+  border-color: var(--input-border) !important;
+}
+
+.modal-safe input::placeholder,
+.modal-safe textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+.modal-safe label,
+.modal-safe h2,
+.modal-safe h3,
+.modal-safe p {
+  color: var(--modal-ink) !important;
+}
+
+/* Fix for dark mode: make sure page text areas work */
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  background-color: var(--input-bg);
+  color: var(--input-ink);
+  border-color: var(--input-border);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #64748b;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue-light); }
+
+/* Selection */
+::selection { background: var(--blue-glow); color: var(--blue); }
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+img { max-width: 100%; display: block; }
+
+button { cursor: pointer; font-family: var(--font-body); }
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(1.3); }
+}
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes progressFill {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+
+/* Utility */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); border: 0;
+}
