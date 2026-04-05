@@ -271,13 +271,13 @@ function Spinner() {
 const fp = {
   page: {
     position: "fixed", inset: 0, zIndex: 300,
-    display: "flex", background: "#fff",
+    display: "flex", background: "#fff", overflowY: "auto",
   },
   left: {
-    flex: 1, background: "linear-gradient(135deg,#0f172a 0%,#1d4ed8 60%,#3b82f6 100%)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    padding: 48,
-    "@media(maxWidth:768px)": { display: "none" },
+    flex: 1,
+    background: "linear-gradient(135deg,#0f172a 0%,#1d4ed8 60%,#3b82f6 100%)",
+    display: window.innerWidth < 768 ? "none" : "flex", // ✅ hidden on mobile
+    alignItems: "center", justifyContent: "center", padding: 48,
   },
   leftInner: { maxWidth: 400, color: "#fff" },
   bigLogo: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "2.5rem", letterSpacing: "-1px", display: "flex", alignItems: "center", gap: 4, marginBottom: 24 },
@@ -287,8 +287,11 @@ const fp = {
   pills: { display: "flex", flexWrap: "wrap", gap: 8 },
   pill: { background: "rgba(255,255,255,0.15)", padding: "6px 14px", borderRadius: 99, fontSize: "0.82rem", fontFamily: "var(--font-display)", fontWeight: 600 },
   right: {
-    width: "100%", maxWidth: 520, display: "flex", flexDirection: "column",
-    alignItems: "center", justifyContent: "center", padding: "40px 32px",
+    width: "100%",
+    maxWidth: window.innerWidth < 768 ? "100%" : 520, // ✅ full width on mobile
+    display: "flex", flexDirection: "column",
+    alignItems: "center", justifyContent: "center",
+    padding: window.innerWidth < 768 ? "60px 24px 40px" : "40px 32px", // ✅ more top padding mobile
     overflowY: "auto", position: "relative",
   },
   backBtn: {
