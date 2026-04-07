@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   collection, query, where, orderBy, onSnapshot,
   addDoc, serverTimestamp, doc, setDoc, getDoc,
-  getDocs, updateDoc,
+  getDocs, updateDoc, writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase/config";
@@ -43,6 +43,22 @@ async function sendMessage(chatId, senderId, text, imageUrl = null) {
     lastMessage: imageUrl ? "📷 Image" : text,
     lastMessageAt: serverTimestamp(),
   });
+}
+
+
+async function markMessagesRead(chatId, currentUid) {
+  try {
+    const q = query(
+      collection(db, "chats", chatId, "messages"),
+      where("senderId", "!=", currentUid),
+      where("read", "==", false)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
+    await batch.commit();
+  } catch(e) { /* ignore */ }
 }
 
 function useChats(uid) {
@@ -87,8 +103,9 @@ function NewChatModal({ currentUser, onStart, onClose }) {
   const [users, setUsers]     = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const handleSearch = async () => {
-    if (!search.trim()) return;
+  const handleSearch = async (val) => {
+    const q = (val !== undefined ? val : search).trim();
+    if (!q) { setUsers([]); return; }
     setLoading(true);
     try {
       const snap = await getDocs(collection(db, "users"));
@@ -96,8 +113,8 @@ function NewChatModal({ currentUser, onStart, onClose }) {
         .map((d) => ({ uid: d.id, ...d.data() }))
         .filter((u) =>
           u.uid !== currentUser.uid &&
-          (u.displayName?.toLowerCase().includes(search.toLowerCase()) ||
-           u.email?.toLowerCase().includes(search.toLowerCase()))
+          (u.displayName?.toLowerCase().includes(q.toLowerCase()) ||
+           u.email?.toLowerCase().includes(q.toLowerCase()))
         );
       setUsers(results);
     } catch (e) { toast.error("Search failed"); }
@@ -113,7 +130,7 @@ function NewChatModal({ currentUser, onStart, onClose }) {
         </div>
         <div style={nc.searchRow}>
           <input style={nc.input} placeholder="Search by name or email…"
-            value={search} onChange={(e) => setSearch(e.target.value)}
+            value={search} onChange={(e) => { setSearch(e.target.value); handleSearch(e.target.value); }}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
           <button style={nc.searchBtn} onClick={handleSearch} disabled={loading}>
             {loading ? "…" : "Search"}
@@ -153,6 +170,11 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
   const [uploading, setUploading] = useState(false);
   const bottomRef = useRef();
   const fileRef   = useRef();
+
+  // Mark messages as read when chat opens or new messages arrive
+  useEffect(() => {
+    if (chatId && currentUser?.uid) markMessagesRead(chatId, currentUser.uid);
+  }, [chatId, messages.length]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -238,6 +260,11 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
                 )}
                 <div style={{ ...cw.time, textAlign: isMine ? "right" : "left" }}>
                   {formatTime(msg.createdAt)}
+                  {isMine && (
+                    <span style={{ marginLeft: 4, fontSize: "0.7rem", color: msg.read ? "#3b82f6" : "var(--muted)" }}>
+                      {msg.read ? "✓✓" : "✓"}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
