@@ -113,7 +113,9 @@ export default function Comments({ postId, postAuthor, postAuthorUid, postTitle,
                 );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
-                  const mentionedUid = snap.docs[0].id;
+                  const mentionedUser = snap.docs[0];
+                  const mentionedUid = mentionedUser.id;
+                  const mentionedData = mentionedUser.data();
                   if (mentionedUid !== currentUser.uid) {
                     await createNotification(mentionedUid, {
                       type:       "comment",
@@ -122,6 +124,33 @@ export default function Comments({ postId, postAuthor, postAuthorUid, postTitle,
                       postId,
                       postTitle:  postTitle || "a post",
                     });
+
+                    // Also send a DM so they see the mention in Messages
+                    try {
+                      const { doc: fsDoc, setDoc: fsSetDoc, addDoc: fsAddDoc, serverTimestamp: fsST, getDoc: fsGetDoc } = await import("firebase/firestore");
+                      const chatId = [currentUser.uid, mentionedUid].sort().join("_");
+                      const chatRef = fsDoc(db, "chats", chatId);
+                      const chatSnap = await fsGetDoc(chatRef);
+                      if (!chatSnap.exists()) {
+                        await fsSetDoc(chatRef, {
+                          participants: [currentUser.uid, mentionedUid],
+                          participantNames: { [currentUser.uid]: displayName, [mentionedUid]: mentionedData.displayName || "User" },
+                          participantPhotos: { [currentUser.uid]: currentUser.photoURL || "", [mentionedUid]: mentionedData.photoURL || "" },
+                          lastMessage: "",
+                          lastMessageAt: fsST(),
+                          createdAt: fsST(),
+                        });
+                      }
+                      await fsAddDoc(collection(db, "chats", chatId, "messages"), {
+                        senderId: currentUser.uid,
+                        text: `👋 I mentioned you in a comment on "${postTitle || "a post"}": ${trimmed}`,
+                        imageUrl: null,
+                        createdAt: fsST(),
+                        read: false,
+                      });
+                      const { updateDoc: fsUpdate } = await import("firebase/firestore");
+                      await fsUpdate(chatRef, { lastMessage: `Mentioned you in "${postTitle || "a post"}"`, lastMessageAt: fsST() });
+                    } catch (dmErr) { console.warn("Could not send mention DM:", dmErr); }
                   }
                 }
               } catch (e) { console.warn("Could not find mentioned user:", e); }
