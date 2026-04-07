@@ -3,30 +3,25 @@ import { useState, useEffect, useRef } from "react";
 import {
   collection, query, where, orderBy, onSnapshot,
   addDoc, serverTimestamp, doc, setDoc, getDoc,
-  getDocs, updateDoc, writeBatch,
+  getDocs, updateDoc, writeBatch, deleteDoc,
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase/config";
 import { toast } from "react-hot-toast";
 
-// ── Firestore helpers ──────────────────────────────────────────────────────
-
-function getChatId(uid1, uid2) {
-  return [uid1, uid2].sort().join("_");
-}
+function getChatId(uid1, uid2) { return [uid1, uid2].sort().join("_"); }
 
 async function getOrCreateChat(uid1, uid2, user1, user2) {
   const chatId = getChatId(uid1, uid2);
-  const ref = doc(db, "chats", chatId);
-  const snap = await getDoc(ref);
+  const chatRef = doc(db, "chats", chatId);
+  const snap = await getDoc(chatRef);
   if (!snap.exists()) {
-    await setDoc(ref, {
+    await setDoc(chatRef, {
       participants: [uid1, uid2],
       participantNames: { [uid1]: user1.displayName || "User", [uid2]: user2.displayName || "User" },
       participantPhotos: { [uid1]: user1.photoURL || "", [uid2]: user2.photoURL || "" },
       lastMessage: "",
       lastMessageAt: serverTimestamp(),
-      unread: { [uid1]: 0, [uid2]: 0 },
       createdAt: serverTimestamp(),
     });
   }
@@ -34,10 +29,10 @@ async function getOrCreateChat(uid1, uid2, user1, user2) {
 }
 
 async function sendMessage(chatId, senderId, text, imageUrl = null) {
+  if (!text && !imageUrl) return;
   await addDoc(collection(db, "chats", chatId, "messages"), {
-    senderId, text, imageUrl,
-    createdAt: serverTimestamp(),
-    read: false,
+    senderId, text: text || "", imageUrl: imageUrl || null,
+    createdAt: serverTimestamp(), read: false,
   });
   await updateDoc(doc(db, "chats", chatId), {
     lastMessage: imageUrl ? "📷 Image" : text,
@@ -45,6 +40,9 @@ async function sendMessage(chatId, senderId, text, imageUrl = null) {
   });
 }
 
+async function deleteMessage(chatId, msgId) {
+  await deleteDoc(doc(db, "chats", chatId, "messages", msgId));
+}
 
 async function markMessagesRead(chatId, currentUid) {
   try {
@@ -58,14 +56,18 @@ async function markMessagesRead(chatId, currentUid) {
     const batch = writeBatch(db);
     snap.docs.forEach((d) => batch.update(d.ref, { read: true }));
     await batch.commit();
-  } catch(e) { /* ignore */ }
+  } catch(e) {}
 }
 
 function useChats(uid) {
   const [chats, setChats] = useState([]);
   useEffect(() => {
     if (!uid) return;
-    const q = query(collection(db, "chats"), where("participants", "array-contains", uid), orderBy("lastMessageAt", "desc"));
+    const q = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", uid),
+      orderBy("lastMessageAt", "desc")
+    );
     return onSnapshot(q, (snap) => setChats(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }, [uid]);
   return chats;
@@ -97,10 +99,20 @@ function formatTime(ts) {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
-// ── New Conversation Modal ─────────────────────────────────────────────────
+function getDateLabel(ts) {
+  if (!ts) return "";
+  const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+// ── New Chat Modal ─────────────────────────────────────────────────────────
 function NewChatModal({ currentUser, onStart, onClose }) {
-  const [search, setSearch]   = useState("");
-  const [users, setUsers]     = useState([]);
+  const [search, setSearch] = useState("");
+  const [users, setUsers]   = useState([]);
   const [loading, setLoading] = useState(false);
 
   const handleSearch = async (val) => {
@@ -130,9 +142,10 @@ function NewChatModal({ currentUser, onStart, onClose }) {
         </div>
         <div style={nc.searchRow}>
           <input style={nc.input} placeholder="Search by name or email…"
-            value={search} onChange={(e) => { setSearch(e.target.value); handleSearch(e.target.value); }}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
-          <button style={nc.searchBtn} onClick={handleSearch} disabled={loading}>
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); handleSearch(e.target.value); }}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()} autoFocus />
+          <button style={nc.searchBtn} onClick={() => handleSearch()} disabled={loading}>
             {loading ? "…" : "Search"}
           </button>
         </div>
@@ -163,15 +176,15 @@ function NewChatModal({ currentUser, onStart, onClose }) {
 
 // ── Chat Window ────────────────────────────────────────────────────────────
 function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
-  const messages    = useMessages(chatId);
-  const [text, setText]       = useState("");
-  const [sending, setSending] = useState(false);
-  const [imgFile, setImgFile] = useState(null);
+  const messages  = useMessages(chatId);
+  const [text, setText]           = useState("");
+  const [sending, setSending]     = useState(false);
+  const [imgFile, setImgFile]     = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [hoveredMsg, setHoveredMsg] = useState(null);
   const bottomRef = useRef();
   const fileRef   = useRef();
 
-  // Mark messages as read when chat opens or new messages arrive
   useEffect(() => {
     if (chatId && currentUser?.uid) markMessagesRead(chatId, currentUser.uid);
   }, [chatId, messages.length]);
@@ -200,6 +213,12 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
     setSending(false);
   };
 
+  const handleDelete = async (msgId) => {
+    if (!window.confirm("Delete this message?")) return;
+    try { await deleteMessage(chatId, msgId); }
+    catch (e) { toast.error("Could not delete"); }
+  };
+
   const handleFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -208,9 +227,17 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
     setImgFile(file);
   };
 
+  // Group messages by date
+  const grouped = [];
+  let lastLabel = null;
+  messages.forEach((msg) => {
+    const label = getDateLabel(msg.createdAt);
+    if (label !== lastLabel) { grouped.push({ type: "date", label }); lastLabel = label; }
+    grouped.push({ type: "msg", msg });
+  });
+
   return (
     <div style={cw.wrap}>
-      {/* Header */}
       <div style={cw.header}>
         <button style={cw.backBtn} onClick={onBack}>←</button>
         <div style={cw.avatar}>
@@ -224,7 +251,6 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
         </div>
       </div>
 
-      {/* Messages */}
       <div style={cw.messages}>
         {messages.length === 0 && (
           <div style={cw.empty}>
@@ -232,10 +258,19 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
             <p>Start the conversation!</p>
           </div>
         )}
-        {messages.map((msg) => {
+        {grouped.map((item, i) => {
+          if (item.type === "date") return (
+            <div key={`date-${i}`} style={cw.dateDivider}>
+              <span style={cw.dateLabel}>{item.label}</span>
+            </div>
+          );
+          const { msg } = item;
           const isMine = msg.senderId === currentUser.uid;
           return (
-            <div key={msg.id} style={{ ...cw.msgRow, justifyContent: isMine ? "flex-end" : "flex-start" }}>
+            <div key={msg.id}
+              style={{ ...cw.msgRow, justifyContent: isMine ? "flex-end" : "flex-start" }}
+              onMouseEnter={() => setHoveredMsg(msg.id)}
+              onMouseLeave={() => setHoveredMsg(null)}>
               {!isMine && (
                 <div style={cw.msgAvatar}>
                   {otherUser?.photoURL
@@ -243,7 +278,21 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
                     : (otherUser?.name || "U")[0].toUpperCase()}
                 </div>
               )}
-              <div style={{ maxWidth: "70%" }}>
+              <div style={{ maxWidth: "70%", position: "relative" }}>
+                {/* Delete button on hover */}
+                {hoveredMsg === msg.id && isMine && (
+                  <button
+                    onClick={() => handleDelete(msg.id)}
+                    style={{
+                      position: "absolute", top: -8, right: -8, zIndex: 10,
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: "#ef4444", border: "none", color: "#fff",
+                      fontSize: "0.65rem", cursor: "pointer", display: "flex",
+                      alignItems: "center", justifyContent: "center",
+                    }}>
+                    ✕
+                  </button>
+                )}
                 {msg.imageUrl && (
                   <img src={msg.imageUrl} alt="attachment"
                     style={{ maxWidth: "100%", borderRadius: 12, marginBottom: msg.text ? 6 : 0, display: "block" }} />
@@ -261,7 +310,7 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
                 <div style={{ ...cw.time, textAlign: isMine ? "right" : "left" }}>
                   {formatTime(msg.createdAt)}
                   {isMine && (
-                    <span style={{ marginLeft: 4, fontSize: "0.7rem", color: msg.read ? "#3b82f6" : "var(--muted)" }}>
+                    <span style={{ marginLeft: 4, color: msg.read ? "#3b82f6" : "var(--muted)" }}>
                       {msg.read ? "✓✓" : "✓"}
                     </span>
                   )}
@@ -273,7 +322,6 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Image preview */}
       {imgFile && (
         <div style={cw.imgPreview}>
           <img src={URL.createObjectURL(imgFile)} alt="" style={{ height: 60, borderRadius: 8, objectFit: "cover" }} />
@@ -282,11 +330,8 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
         </div>
       )}
 
-      {/* Input */}
       <div style={cw.inputRow}>
-        <button style={cw.attachBtn} onClick={() => fileRef.current?.click()} title="Attach image">
-          📎
-        </button>
+        <button style={cw.attachBtn} onClick={() => fileRef.current?.click()} title="Attach image">📎</button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleFile} />
         <input style={cw.input} placeholder="Type a message…"
           value={text} onChange={(e) => setText(e.target.value)}
@@ -303,17 +348,14 @@ function ChatWindow({ chatId, currentUser, otherUser, onBack }) {
 // ── Main DM Page ───────────────────────────────────────────────────────────
 export default function DirectMessages({ currentUser, onClose }) {
   const chats = useChats(currentUser?.uid);
-  const [activeChatId, setActiveChatId]     = useState(null);
+  const [activeChatId, setActiveChatId]       = useState(null);
   const [activeOtherUser, setActiveOtherUser] = useState(null);
-  const [showNewChat, setShowNewChat]       = useState(false);
+  const [showNewChat, setShowNewChat]         = useState(false);
 
   const handleStartChat = async (otherUser) => {
     setShowNewChat(false);
     try {
-      const chatId = await getOrCreateChat(
-        currentUser.uid, otherUser.uid,
-        currentUser, otherUser
-      );
+      const chatId = await getOrCreateChat(currentUser.uid, otherUser.uid, currentUser, otherUser);
       setActiveChatId(chatId);
       setActiveOtherUser({ name: otherUser.displayName, photoURL: otherUser.photoURL, uid: otherUser.uid });
     } catch (e) { toast.error("Could not start chat"); }
@@ -333,7 +375,6 @@ export default function DirectMessages({ currentUser, onClose }) {
 
   return (
     <div style={dm.page}>
-      {/* ── Sidebar ── */}
       <div style={dm.sidebar}>
         <div style={dm.sideHeader}>
           <div>
@@ -346,7 +387,6 @@ export default function DirectMessages({ currentUser, onClose }) {
           </div>
         </div>
 
-        {/* Chat list */}
         <div style={dm.chatList}>
           {chats.length === 0 ? (
             <div style={dm.empty}>
@@ -357,14 +397,14 @@ export default function DirectMessages({ currentUser, onClose }) {
             </div>
           ) : (
             chats.map((chat) => {
-              const otherId   = chat.participants.find((p) => p !== currentUser.uid);
-              const otherName = chat.participantNames?.[otherId] || "User";
+              const otherId    = chat.participants.find((p) => p !== currentUser.uid);
+              const otherName  = chat.participantNames?.[otherId] || "User";
               const otherPhoto = chat.participantPhotos?.[otherId] || "";
-              const isActive  = chat.id === activeChatId;
+              const isActive   = chat.id === activeChatId;
               return (
                 <div key={chat.id} style={{
                   ...dm.chatRow,
-                  background: isActive ? "var(--blue-glow, rgba(29,78,216,0.08))" : "transparent",
+                  background: isActive ? "rgba(29,78,216,0.08)" : "transparent",
                   borderLeft: isActive ? "3px solid var(--blue)" : "3px solid transparent",
                 }}
                   onClick={() => handleOpenChat(chat)}
@@ -387,7 +427,6 @@ export default function DirectMessages({ currentUser, onClose }) {
         </div>
       </div>
 
-      {/* ── Chat area ── */}
       <div style={dm.main}>
         {activeChatId ? (
           <ChatWindow
@@ -401,25 +440,19 @@ export default function DirectMessages({ currentUser, onClose }) {
             <span style={{ fontSize: 64 }}>💌</span>
             <h2 style={dm.placeholderTitle}>Your Messages</h2>
             <p style={dm.placeholderSub}>Select a conversation or start a new one</p>
-            <button style={dm.placeholderBtn} onClick={() => setShowNewChat(true)}>
-              ✏️ New Message
-            </button>
+            <button style={dm.placeholderBtn} onClick={() => setShowNewChat(true)}>✏️ New Message</button>
           </div>
         )}
       </div>
 
       {showNewChat && (
-        <NewChatModal
-          currentUser={currentUser}
-          onStart={handleStartChat}
-          onClose={() => setShowNewChat(false)}
-        />
+        <NewChatModal currentUser={currentUser} onStart={handleStartChat} onClose={() => setShowNewChat(false)} />
       )}
     </div>
   );
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────
 const dm = {
   page: { position: "fixed", inset: 0, zIndex: 300, background: "var(--bg)", display: "flex", animation: "fadeIn 0.2s ease" },
   sidebar: { width: 320, borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", flexShrink: 0 },
@@ -450,8 +483,10 @@ const cw = {
   avatar: { width: 40, height: 40, borderRadius: "50%", background: "var(--blue)", color: "#fff", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 },
   name: { fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.95rem", color: "var(--ink)" },
   status: { fontSize: "0.74rem", color: "var(--muted)" },
-  messages: { flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 12 },
+  messages: { flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 8 },
   empty: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--muted)", fontSize: "0.9rem" },
+  dateDivider: { display: "flex", alignItems: "center", justifyContent: "center", margin: "12px 0" },
+  dateLabel: { background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 100, padding: "3px 14px", fontSize: "0.72rem", color: "var(--muted)", fontFamily: "var(--font-display)", fontWeight: 600 },
   msgRow: { display: "flex", alignItems: "flex-end", gap: 8 },
   msgAvatar: { width: 28, height: 28, borderRadius: "50%", background: "var(--blue)", color: "#fff", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "0.72rem", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 },
   bubble: { padding: "10px 14px", borderRadius: 18, fontSize: "0.92rem", lineHeight: 1.5, fontFamily: "var(--font-body)", wordBreak: "break-word" },
