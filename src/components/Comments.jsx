@@ -104,8 +104,13 @@ export default function Comments({ postId, postAuthor, postAuthorUid, postTitle,
               if (mentionedName.toLowerCase() === postAuthor?.toLowerCase()) continue;
               // Try to find user by displayName in Firestore
               try {
-                const { collection, query, where, getDocs } = await import("firebase/firestore");
-                const q = query(collection(db, "users"), where("displayName", "==", mentionedName));
+                const { collection, query, where, getDocs, orderBy: orderByFs } = await import("firebase/firestore");
+                // Use >= and <= trick to do a "startsWith" search (case-sensitive)
+                const q = query(
+                  collection(db, "users"),
+                  where("displayName", ">=", mentionedName),
+                  where("displayName", "<=", mentionedName + "\uf8ff")
+                );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
                   const mentionedUid = snap.docs[0].id;
