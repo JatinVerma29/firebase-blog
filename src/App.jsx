@@ -88,6 +88,7 @@ export default function App() {
         onProfileClick={() => setShowProfile(true)}
         onAnalyticsClick={() => setShowAnalytics(true)}
         onDMClick={handleDMClick} // ✅
+        onOpenPost={(postId) => { const p = posts.find(x => x.id === postId); if (p) setSelectedPost(p); }}
         user={user}
       />
 
