@@ -2,6 +2,10 @@
 
 > **Agile Engine for Reactive Output** — Built by Jatin Verma (11232673) & Jatin (11232671)
 
+🌐 **Live Demo:** [https://firebase-blog-wine.vercel.app](https://firebase-blog-wine.vercel.app)
+
+[![Live Demo](https://img.shields.io/badge/🚀%20Live%20Demo-firebase--blog--wine.vercel.app-2563eb?style=for-the-badge&logo=vercel&logoColor=white)](https://firebase-blog-wine.vercel.app)
+
 ---
 
 ## 🚀 Quick Start
